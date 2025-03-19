@@ -1,3 +1,3 @@
 package net.jaxlo.jl.prerunner3
 
-// This is where the main page is stored
+// I'll move more of the Jetpack code here once I start building the frontend

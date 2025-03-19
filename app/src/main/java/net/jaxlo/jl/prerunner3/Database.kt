@@ -77,15 +77,19 @@ fun dummyData(db: SQLiteDatabase) {
     val user3Id = createUser(db, "Alice Johnson")
 
     // Today's goals
-    createTask(db, "Complete Kotlin tutorial", today, user1Id.toInt())
-    createTask(db, "Buy groceries", today, user1Id.toInt())
-    createTask(db, "Finish project", today, user2Id.toInt())
-    // Plan tomorrow
-    createTask(db, "Clean the house", tomorrow, user2Id.toInt())
-    createTask(db, "Study for exam", tomorrow, user3Id.toInt())
-    createTask(db, "Prepare presentation", tomorrow, user3Id.toInt())
+    val task1Id = createTask(db, "Complete Kotlin tutorial", today, 1)
+    val task2Id = createTask(db, "Buy groceries", today, 1)
+    val task3Id = createTask(db, "Finish project", today, 1)
 
-    Log.d("Database", "Dummy data inserted.")
+    // Plan tomorrow
+    val task4Id = createTask(db, "Clean the house", tomorrow, 1)
+    val task5Id = createTask(db, "Study for exam", tomorrow, 1)
+    val task6Id = createTask(db, "Prepare presentation", tomorrow, 1)
+
+    // Insert encouragements (task_encouragers records)
+    createEncouragement(db, task2Id.toInt(), 1) // User 3 encourages User 1 on task 2
+
+    Log.d("Database", "Dummy data with encouragements inserted.")
 }
 
 // --- --- --- Below are the functions for interacting with the database layer --- --- ---
@@ -142,6 +146,15 @@ fun deleteTask(db: SQLiteDatabase, taskId: Int): Int {
     return rowsAffected
 }
 
+fun createEncouragement(db: SQLiteDatabase, taskId: Int, userId: Int): Long {
+    // Insert an encouragement record
+    val values = ContentValues().apply {
+        put("task_id", taskId)
+        put("user_id", userId)
+    }
+    return db.insert("task_encouragers", null, values)
+}
+
 fun editUsername(db: SQLiteDatabase, newName: String): Int {
     // change from the default username of the local user
     val values = ContentValues().apply {
@@ -154,3 +167,70 @@ fun editUsername(db: SQLiteDatabase, newName: String): Int {
     return rowsAffected
 }
 
+fun getTasks(db: SQLiteDatabase): List<Map<String, String>> {
+    // Get the tasks of the local user
+    val tasks = mutableListOf<Map<String, String>>()
+    val query = """
+        SELECT tasks.id, tasks.name, tasks.is_complete, tasks.date, users.name AS owner_name
+        FROM tasks
+        INNER JOIN users ON tasks.owner = users.id
+        WHERE users.id = 1
+    """
+    val cursor = db.rawQuery(query, null)
+    if (cursor.moveToFirst()) {
+        do {
+            val task = mapOf(
+                "id" to cursor.getInt(cursor.getColumnIndexOrThrow("id")).toString(),
+                "name" to cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                "is_complete" to cursor.getInt(cursor.getColumnIndexOrThrow("is_complete")).toString(),
+                "date" to cursor.getString(cursor.getColumnIndexOrThrow("date")),
+                "owner_name" to cursor.getString(cursor.getColumnIndexOrThrow("owner_name"))
+            )
+            tasks.add(task)
+        } while (cursor.moveToNext())
+    }
+    cursor.close()
+    return tasks
+}
+
+fun getEncouragementForUserById(db: SQLiteDatabase, userId: Int): List<Map<String, String>> {
+    // See who you encouraged
+    val encouragements = mutableListOf<Map<String, String>>()
+    val query = """
+        SELECT task_encouragers.id, tasks.name AS task_name, users.name AS encourager_name
+        FROM task_encouragers
+        INNER JOIN tasks ON task_encouragers.task_id = tasks.id
+        INNER JOIN users ON task_encouragers.user_id = users.id
+        WHERE task_encouragers.user_id = ?
+    """
+    val cursor = db.rawQuery(query, arrayOf(userId.toString()))
+    if (cursor.moveToFirst()) {
+        do {
+            val encouragement = mapOf(
+                "id" to cursor.getInt(cursor.getColumnIndexOrThrow("id")).toString(),
+                "task_name" to cursor.getString(cursor.getColumnIndexOrThrow("task_name")),
+                "encourager_name" to cursor.getString(cursor.getColumnIndexOrThrow("encourager_name"))
+            )
+            encouragements.add(encouragement)
+        } while (cursor.moveToNext())
+    }
+    cursor.close()
+    return encouragements
+}
+
+fun clearDatabase(db: SQLiteDatabase) {
+    // Delete everything in the database
+    db.beginTransaction()
+    try {
+        db.delete("task_encouragers", null, null)
+        db.delete("tasks", null, null)
+        db.delete("users", null, null)
+        db.setTransactionSuccessful()
+    } catch (e: Exception) {
+        Log.e("Database", "Error clearing the database: ${e.message}")
+    } finally {
+        db.endTransaction()
+    }
+
+    Log.d("Database", "Database cleared.")
+}
