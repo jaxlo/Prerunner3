@@ -6,112 +6,108 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import net.jaxlo.jl.prerunner3.ui.theme.Prerunner3Theme
-import android.util.Log
-import android.database.sqlite.SQLiteDatabase
-import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.text.style.TextAlign
+import org.json.JSONArray
+
+
 
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var dbHelper: DatabaseHelper
-    private lateinit var db: SQLiteDatabase
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Store today's date
-        val today = java.time.LocalDate.now().toString()
 
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize the DatabaseHelper and get the writable database
-        dbHelper = DatabaseHelper(this)
-        db = dbHelper.writableDatabase
-
-        // Insert dummy data
-        dummyData(db)
-
-        // Display tasks
-        val tasks = getTasks(db)
-        tasks.forEach { task ->
-            Log.d("CS3680", "Task: $task")
-        }
-
-        // Display encouragement
-        val encouragements = getEncouragementForUserById(db, 1)
-        // Using id=1 because that is the local user
-        for (encouragement in encouragements) {
-            Log.d("CS3680", "Encouragement: ${encouragement["task_name"]} by ${encouragement["encourager_name"]}")
-        }
-
-        // Testing functions
-        // editTask(db, 1, "Complete Kotlin tutorial updated", true)
-        // deleteTask(db, 2)
-        // editUsername(db, "Updated User Name")
-
         setContent { // Put this in a different file?
             Prerunner3Theme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "dude",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-
-                    ClearDatabaseButton(db)
-                }
+                JsonTextView()
             }
         }
     }
 }
 
+
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
+fun JsonTextView() {
+    var jsonText by remember { mutableStateOf("Loading...") }
+
+    LaunchedEffect(Unit) {
+        jsonText = try {
+            val jsonData = getJson()
+            val thirdSatelliteInfo = getThirdSatelliteOfJupiter(jsonData)
+            thirdSatelliteInfo
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = jsonText,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+suspend fun getJson(): String {
+    return withContext(Dispatchers.IO) {
+        URL("https://roversgame.net/cs3680/planets.json").readText()
+    }
+}
+
+fun getThirdSatelliteOfJupiter(jsonData: String): String {
+    val planets = JSONArray(jsonData)
+    for (i in 0 until planets.length()) {
+        val planet = planets.getJSONObject(i)
+        if (planet.getString("name") == "Jupiter") {
+            val satellites = planet.optJSONArray("satellites")
+            if (satellites != null && satellites.length() >= 3) {
+                val thirdSatellite = satellites.getJSONObject(2) // Index 2 for the third satellite
+                val name = thirdSatellite.getString("name")
+                val diameterKm = thirdSatellite.getString("diameterKm")
+                return "Third satellite of Jupiter: \nName: $name\nDiameter: $diameterKm km"
+            } else {
+                return "Jupiter has less than three satellites in the data."
+            }
+        }
+    }
+    return "Jupiter is not found in the JSON data."
 }
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
-    Prerunner3Theme {
-        Greeting("Android")
-    }
-}
-
-// TODO move this to another file
-@Composable
-fun ClearDatabaseButton(db: SQLiteDatabase) {
-    Column(
-        modifier = Modifier.padding(16.dp)
+fun PreviewJsonTextView() {
+    // Display static content for preview
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Button(onClick = {
-            // Call the function to clear the database when the button is clicked
-            clearDatabase(db)
-        }) {
-            Text(text = "Clear Database")
-        }
+        Text(
+            text = "Sample JSON data",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
     }
-}
-
-// Preview function for the UI
-@Preview
-@Composable
-fun ClearDatabaseButtonPreview() {
-    // Replace with your actual database instance in real usage
-    val db: SQLiteDatabase = SQLiteDatabase.create(null) // Example: Create an in-memory DB
-    ClearDatabaseButton(db)
 }
